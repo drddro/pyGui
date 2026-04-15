@@ -13,6 +13,7 @@ class Registry[T]:
         self._is_built: bool = False
 
 #region builder methods
+
     def set_default(self, item: T) -> 'Registry[T]':
         self._registry.setdefault('default', item)
         return self
@@ -24,8 +25,6 @@ class Registry[T]:
     def build(self) -> 'Registry[T]':
         if self._default_mapper is None:
             raise ValueError('Registry must have at least one IDMapper as default before building.')
-        if 'default' not in self._registry:
-            raise ValueError('Registry must have a default item before building.')
         self._is_built = True
         return self
 
@@ -54,8 +53,7 @@ class Registry[T]:
     def _get_default(self) -> T:
         item: T | None = self._registry.get('default')
         if item is None:
-            #this should never happen since we check for default item in build method, but just in case
-            raise ValueError('Default item not found in registry.') 
+            raise ValueError('Failed to load default item as none was defined.') 
         return item
 
     @requires_checks(_check_is_built, error_message='Registry must be built before adding items.')

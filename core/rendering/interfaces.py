@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from pygame import Surface, Vector2
 
-from core.singletons.asset import AssetRegistry
+from core.singletons.asset import AssetLoader
 
 
 class View(ABC):
@@ -12,7 +12,7 @@ class View(ABC):
         self,
         surface: Surface,
         area: Vector2,
-        asset_registry: AssetRegistry,
+        asset_loader: AssetLoader,
         ) -> Surface:
         pass
 
@@ -21,11 +21,11 @@ class View(ABC):
         pass
 
     @abstractmethod
-    def set_active(self, asset_registry: AssetRegistry | None, area: Vector2) -> 'View':
+    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'View':
         pass
 
     @abstractmethod
-    def load_assets_from_file(self, asset_registry: AssetRegistry) -> None:
+    def load_assets_from_file(self, asset_loader: AssetLoader) -> None:
         pass
 
 class HasView(ABC):

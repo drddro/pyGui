@@ -3,7 +3,7 @@ from pygame import Vector2
 
 from core.rendering.interfaces import HasView
 from core.rendering.renderer import Renderer
-from core.singletons.asset import AssetRegistry
+from core.singletons.asset import AssetLoader
 
 
 class PyGui:
@@ -13,23 +13,23 @@ class PyGui:
 
         self._renderer: Renderer = Renderer()
         self._has_views: list[HasView] = []
-        self._asset_registry: AssetRegistry = AssetRegistry()
+        self._asset_loader: AssetLoader = AssetLoader()
 
     @property
     def window_dimensions(self) -> Vector2:
         return self._window_dimensions
     
     @property
-    def asset_registry(self) -> AssetRegistry:
-        return self._asset_registry
+    def asset_loader(self) -> AssetLoader:
+        return self._asset_loader
 
-#region setup
-    def initialize(self, asset_directory: str) -> 'PyGui':
+#region API
+    def initialize(self) -> 'PyGui':
         pygame.init()
         pygame.font.init()
         screen = pygame.display.set_mode(self._window_dimensions)
-        self._asset_registry = AssetRegistry().load_from_directory(asset_directory).build()
-        self._renderer.set_assets_registry(self._asset_registry).set_window_dimensions(self._window_dimensions).set_screen(screen).build()
+        self._asset_loader = AssetLoader().with_pygame_loader().build()
+        self._renderer.set_assets_registry(self._asset_loader).set_window_dimensions(self._window_dimensions).set_screen(screen).build()
         return self
     
     def add_has_view(self, has_view: HasView) -> 'PyGui':

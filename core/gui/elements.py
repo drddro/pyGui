@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from pygame import Surface, Vector2
 
 from core.gui.error import UIError
-from core.singletons.asset import AssetRegistry
+from core.singletons.asset import AssetLoader
 
 
 class UIElement(ABC):
@@ -17,6 +17,10 @@ class UIElement(ABC):
         self._relative_size = Vector2(1, 1)
         if relative_size is not None:
             self.set_relative_size(relative_size)
+
+    @abstractmethod
+    def get_surface(self, asset_loader: AssetLoader, area: Vector2) -> Surface:
+        pass
 
     def get_area(self) -> Vector2:
         if self._area is None:
@@ -47,10 +51,6 @@ class UIElement(ABC):
     def _clear_forced_area(self) -> None:
         self._forced_area = None
 
-    @abstractmethod
-    def get_surface(self, asset_registry: AssetRegistry, area: Vector2) -> Surface:
-        pass
-
 class UIDivision(UIElement):
 
     def __init__(self, children: Sequence[UIElement], relative_size: Vector2 | None = None):
@@ -76,7 +76,7 @@ class UIDivision(UIElement):
             self._children.remove(child)
         return self
     
-    def get_surface(self, asset_registry: AssetRegistry, area: Vector2) -> Surface:
+    def get_surface(self, asset_loader: AssetLoader, area: Vector2) -> Surface:
         own_area = self.resolve_area(area)
         self.set_area(own_area)
         surface = Surface(own_area)
@@ -85,7 +85,7 @@ class UIDivision(UIElement):
         curr_pos = Vector2(0, 0)
         for child in self._children:
             child._set_forced_area(child_area)
-            child_surface = child.get_surface(asset_registry, child_area)
+            child_surface = child.get_surface(asset_loader, child_area)
             child._clear_forced_area()
             surface.blit(child_surface, (int(curr_pos.x), int(curr_pos.y)))
             curr_pos += child_area.elementwise() * Vector2(self._resize_child_directions) #resize in the directions specified by _resize_child_directions
@@ -112,7 +112,7 @@ class UILabel(UIElement):
         self._font: pygame.font.Font = font
         self._text = text
 
-    def get_surface(self, asset_registry: AssetRegistry, area: Vector2) -> Surface:
+    def get_surface(self, asset_loader: AssetLoader, area: Vector2) -> Surface:
         own_area = self.resolve_area(area)
         self.set_area(own_area)
         text_surface = self._font.render(self._text, True, (0, 0, 0))
@@ -121,3 +121,16 @@ class UILabel(UIElement):
         text_rect = text_surface.get_rect(center=(own_area.x / 2, own_area.y / 2))
         surface.blit(text_surface, text_rect)
         return surface
+    
+class UIImage(UIElement):
+
+    def __init__(self, image_path: str, relavtive_size: Vector2 | None = None):
+        super().__init__(relavtive_size)
+        self._image_path = image_path
+
+    def get_surface(self, asset_loader: AssetLoader, area: Vector2) -> Surface:
+        own_area = self.resolve_area(area)
+        self.set_area(own_area)
+        image_surface = asset_loader.load_asset(self._image_path)
+        image_surface = pygame.transform.scale(image_surface, (int(own_area.x), int(own_area.y)))
+        return image_surface

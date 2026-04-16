@@ -1,8 +1,8 @@
 from pygame import Surface, Vector2
 
 from core.rendering.interfaces import View
-from core.singletons.asset import AssetRegistry
-from core.utils.decorators import requires_checks
+from core.singletons.asset import AssetLoader
+from core.utils.decorators import locks
 
 
 class Renderer:
@@ -14,7 +14,7 @@ class Renderer:
         self._screen_surface = screen
         return self
 
-    def set_assets_registry(self, assets_registry: AssetRegistry) -> 'Renderer':
+    def set_assets_registry(self, assets_registry: AssetLoader) -> 'Renderer':
         self._assets_registry = assets_registry
         return self
         
@@ -37,7 +37,7 @@ class Renderer:
     def _has_view(self) -> bool:
         return self._current_view is not None
 
-    @requires_checks(_is_built)
+    @locks(_is_built, error_message='Renderer must be built before setting a view.')
     def set_view(self, view: View, area: Vector2) -> 'Renderer':
         if self._current_view is not None:
             self._current_view.set_passive()
@@ -45,10 +45,10 @@ class Renderer:
         view.set_active(self._assets_registry, area.copy())
         return self
     
-    @requires_checks(_is_built, error_message='Renderer must be built before rendering.')
-    @requires_checks(_has_view, error_message='A view must be set before rendering.')
+    @locks(_is_built, error_message='Renderer must be built before rendering.')
+    @locks(_has_view, error_message='A view must be set before rendering.')
     def render(self) -> None:
-        self._screen_surface.fill((0, 0, 0)) #type: ignore - requires_checks ensures everything used by this func is not None
+        self._screen_surface.fill((0, 0, 0)) #type: ignore - locks ensures everything used by this func is not None
 
         rendered_surface = self._current_view.render( #type: ignore
             self._screen_surface, #type: ignore

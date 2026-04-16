@@ -1,81 +1,98 @@
-from collections.abc import Callable
+from typing import Callable
 
 from pygame import Surface
+import pygame
 
-from core.utils.registry.registry import Registry
+from core.utils.decorators import locks
+
+class AssetLoaderError(Exception):
+
+    def __init__(self, file_type: str):
+        super().__init__(f'No loader found for file type: {file_type}')
 
 
-class AssetRegistry(Registry[Surface]):
+class AssetLoader:
+
+    def __init__(self):
+        self._loaders: list[AssetLoadStrategy] = []
+        self._loaded_assets: dict[str, Surface] = {}
+
+        self._is_built = False
+
+    def with_pygame_loader(self) -> 'AssetLoader':
+        return self.register_loader(_PygameAssetLoadStrategy().build())
+
+
+    def build(self) -> 'AssetLoader':
+        if len(self._loaders) == 0:
+            raise ValueError('At least one AssetLoadStrategy must be registered.')
+        for loader in self._loaders:
+            if not loader.is_built():
+                raise ValueError('All registered AssetLoadStrategies must be built before building AssetLoader.')
+        self._is_built = True
+        return self
+
+    def register_loader(self, loader: 'AssetLoadStrategy') -> 'AssetLoader':
+        if not loader in self._loaders:
+            if not loader.is_built():
+                raise ValueError('AssetLoadStrategy must be built before registration.')
+            self._loaders.append(loader)
+        return self
+
+    def load_asset(self, file_path: str) -> Surface:
+        if file_path in self._loaded_assets:
+            return self._loaded_assets[file_path]
+        else:
+            loaded_asset = self._load_from_file(file_path)
+            self._loaded_assets[file_path] = loaded_asset
+            return loaded_asset
+        
+    def _load_from_file(self, file_path: str) -> Surface:
+        from os import path
+        file_type = path.split('.')[-1]
+        for loader in self._loaders:
+            if loader.supports_file_type(file_type):
+                return loader.load(file_path)
+        raise AssetLoaderError(file_type)
+
+class AssetLoadStrategy:
+
+    def __init__(self):
+        self._supported_file_types: list[str] = []
+        self._load_strategy: Callable[[str], Surface] | None = None
+        self.build_complete = False
+        pass
+
+    def with_supported_file_types(self, *file_types: str) -> 'AssetLoadStrategy':
+        self._supported_file_types.extend(file_types)
+        return self
+    
+    def with_load_strategy(self, load_strategy: Callable[[str], Surface]) -> 'AssetLoadStrategy':
+        self._load_strategy = load_strategy
+        return self
+    
+    def build(self) -> 'AssetLoadStrategy':
+        if self._load_strategy is None and len(self._supported_file_types) == 0:
+            raise ValueError(f'Load strategy must be defined for: {self._supported_file_types}')
+        self.build_complete = True
+        return self
+    
+    def is_built(self) -> bool:
+        return self.build_complete
+
+    @locks(is_built, error_message="AssetLoadStrategy must be built before use.")
+    def supports_file_type(self, file_type: str) -> bool:
+        return file_type in self._supported_file_types
+    
+    @locks(is_built, error_message="AssetLoadStrategy must be built before use.")
+    def load(self, file_path: str) -> Surface:
+        return self._load_strategy(file_path) #type: ignore - lock ensures this is not None
+    
+class _PygameAssetLoadStrategy(AssetLoadStrategy):
 
     def __init__(self):
         super().__init__()
-        self._file_type_parsers: list['FileTypeSurfaceParser'] = []
+        self.with_supported_file_types('png', 'jpg', 'jpeg').with_load_strategy(self._load_with_pygame)
 
-    def register_file_type_parser(self, file_type_parser: 'FileTypeSurfaceParser') -> 'AssetRegistry':
-        self._file_type_parsers.append(file_type_parser)
-        return self
-
-    def _load_from_directory(
-        self,
-        directory: str,
-        should_include: Callable[[str], bool] | None = None,
-    ) -> None:
-        import os
-
-        for file_name in os.listdir(directory):
-            if should_include is not None and not should_include(file_name):
-                continue
-
-            file_path = os.path.join(directory, file_name)
-            for parser in self._file_type_parsers:
-                if file_name.endswith(parser.get_file_extension()): #type: ignore
-                    asset = parser.parse(file_path) # type: ignore
-                    super().add(asset) # type: ignore
-                    break
-            else:
-                raise ValueError(f'No parser found for file: {file_name}')
-    
-    def load_default_from_file(self, file_path: str, file_name: str) -> 'AssetRegistry':
-        self._load_from_directory(file_path, lambda current_file_name: current_file_name.startswith(file_name + '.'))
-        return self
-    
-    def load_from_directory(self, directory: str) -> 'AssetRegistry':
-        self._load_from_directory(directory)
-        return self
-
-    def build(self) -> 'AssetRegistry':
-        self._file_type_parsers.append(FileTypeSurfaceParser.default_file_type_parser())
-        return self
-
-class FileTypeSurfaceParser:
-
-    def __init__(self, parser_function: Callable[[str], Surface], *supported_file_extensions: str):
-        self._supported_file_extensions: set[str] = set(supported_file_extensions)
-        self._parser_function = parser_function
-
-    @classmethod
-    def default_file_type_parser(cls) -> 'FileTypeSurfaceParser':
-        import pygame
-
-        def parser_function(file_path: str) -> Surface:
-            return pygame.image.load(file_path)
-
-        return cls(parser_function, '.png', '.jpg', '.jpeg', '.bmp', '.gif')
-
-    def set_file_extensions(self, *file_extensions: str) -> 'FileTypeSurfaceParser':
-        self._supported_file_extensions = set(file_extensions)
-        return self
-
-    def add_file_extension(self, file_extension: str) -> 'FileTypeSurfaceParser':
-        self._supported_file_extensions.add(file_extension)
-        return self
-
-    def set_parser_function(self, parser_function: Callable[[str], Surface]) -> 'FileTypeSurfaceParser':
-        self._parser_function = parser_function
-        return self
-
-    def get_supported_file_extensions(self) -> set[str]:
-        return self._supported_file_extensions
-
-    def parse(self, file_path: str) -> Surface:
-        return self._parser_function(file_path)
+    def _load_with_pygame(self, file_path: str) -> Surface:
+        return pygame.image.load(file_path)

@@ -4,7 +4,6 @@ from pygame import Vector2
 from core.rendering.interfaces import HasView
 from core.rendering.renderer import Renderer
 from core.singletons.asset import AssetRegistry
-from events.system import EventSystem
 
 
 class PyGui:
@@ -15,15 +14,10 @@ class PyGui:
         self._renderer: Renderer = Renderer()
         self._has_views: list[HasView] = []
         self._asset_registry: AssetRegistry = AssetRegistry()
-        self._event_system: EventSystem = EventSystem()
 
     @property
     def window_dimensions(self) -> Vector2:
         return self._window_dimensions
-
-    @property
-    def event_system(self) -> EventSystem:
-        return self._event_system
     
     @property
     def asset_registry(self) -> AssetRegistry:

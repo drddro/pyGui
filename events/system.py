@@ -2,15 +2,10 @@ from typing import Any, Callable
 
 event_system_instance: '_EventSystem | None' = None
 
-def init():
-    global event_system_instance
-    if event_system_instance is not None:
-        return
-    event_system_instance = _EventSystem()
-
 def get_event_system() -> '_EventSystem':
+    global event_system_instance
     if event_system_instance is None:
-        raise RuntimeError("Event system not initialized. Call 'init()' before using the event system.")
+        event_system_instance = _EventSystem()
     return event_system_instance
 
 

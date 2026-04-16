@@ -4,7 +4,6 @@ from core.rendering.interfaces import HasView, View
 from core.singletons.asset import AssetLoader
 
 from pygame import Surface, Vector2
-import traceback
 
 
 def main():
@@ -14,11 +13,8 @@ def main():
     pyGui.add_has_view(ExampleHasView(pyGui.asset_loader))
     pyGui.set_active_view('example_view')
 
-    try:
-        pyGui.run()
-    except Exception:
-        traceback.print_exc()
-        pyGui.close()
+    pyGui.run()
+
     
 
 class ExampleHasView(HasView):

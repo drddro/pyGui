@@ -1,19 +1,79 @@
-from typing import Any
+from enum import IntEnum
+from pygame import Vector2
 
 from events.annotations import event_model
 
+class ReadOnlyError(AttributeError):
+    def __init__(self, specification: str):
+        super().__init__(f"{specification} was set, but it's read-only.")
 
-@event_model("view_change")  # type: ignore[misc]
+#region view change event
+@event_model(event_type="view_change")  # type: ignore[misc]
 class ViewChangeEvent:
     def __init__(self, view_id: str):
-        self.view_id = view_id
+        self.has_view_id = view_id
 
-@event_model("mouse_event")  # type: ignore[misc]
+#region mouse event
+class MouseButtons(IntEnum):
+    LEFT = 1
+    MIDDLE = 2
+    RIGHT = 3
+    SCROLL_UP = 4
+    SCROLL_DOWN = 5
+
+@event_model(event_type="mouse_event")  # type: ignore[misc]
 class MouseEvent:
-    def __init__(self, data: Any): #type to determine later
-        self.data = data
+    def __init__(self, pos: Vector2, buttons: list[MouseButtons]): #type to determine later
+        self._pos = pos
+        self._buttons = buttons
 
-@event_model("keyboard_event")  # type: ignore[misc]
+    @property
+    def pos(self) -> Vector2:
+        return self._pos
+    
+    @pos.setter
+    def pos(self, value: Vector2):
+        raise ReadOnlyError("MouseEvent.pos")
+    
+    @property
+    def buttons(self) -> list[MouseButtons]:
+        return self._buttons
+    
+    @buttons.setter
+    def buttons(self, value: list[MouseButtons]):
+        raise ReadOnlyError("MouseEvent.buttons")
+
+#region keyboard event
+@event_model(event_type="keyboard_event")  # type: ignore[misc]
 class KeyboardEvent:
-    def __init__(self, data: Any): #type to determine later
-        self.data = data
+    def __init__(self, unicode: str): #type to determine later
+        self._unicode = unicode
+
+    @property
+    def unicode(self) -> str:
+        return self._unicode
+    
+    @unicode.setter
+    def unicode(self, value: str):
+        raise ReadOnlyError("KeyboardEvent.unicode")
+
+
+#region quit event
+@event_model(event_type="quit_event")  # type: ignore[misc]
+class QuitEvent:
+    def __init__(self):
+        pass
+
+#region window resize event
+@event_model(event_type="window_resize_event")  # type: ignore[misc]
+class WindowResizeEvent:
+    def __init__(self, new_size: Vector2): # type: ignore #type to determine later
+        self._new_size = new_size
+
+    @property
+    def new_size(self) -> Vector2:
+        return self._new_size
+    
+    @new_size.setter
+    def new_size(self, value: Vector2):
+        raise ReadOnlyError("WindowResizeEvent.new_size")

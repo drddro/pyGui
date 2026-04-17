@@ -4,11 +4,13 @@ import pygame
 from pygame import Vector2
 
 from core.event_factory import PyGuiEventFactory
-from core.event_models import QuitEvent, ViewChangeEvent
+from core.event_models import QuitEvent, ViewChangeEvent, WindowResizeEvent
 from core.lifecycle_interface import OnExit
 from core.rendering.interfaces import HasView
 from core.rendering.renderer import Renderer
 from core.singletons.asset import AssetLoader
+
+from events.annotations import event_listener
 from events.system import get_event_system
 
 
@@ -41,7 +43,8 @@ class PyGui:
         pygame.font.init()
 
         event_system = get_event_system()
-        event_system.subscribe("view_change", self._on_view_change)
+        event_system.subscribe("view_change_event", self._on_view_change)
+        event_system.subscribe("window_resize_event", self._on_window_resize)
         event_system.subscribe("quit_event", self.close)
 
         screen = pygame.display.set_mode(self._window_dimensions)
@@ -77,25 +80,41 @@ class PyGui:
 
 
 #region Events
+    @event_listener(event_type="view_change_event")
     def _on_view_change(self, event: ViewChangeEvent) -> None:
         self.set_active_view(has_view_id=event.has_view_id)
 
+    @event_listener(event_type="window_resize_event")
+    def _on_window_resize(self, event: WindowResizeEvent) -> None:
+        self._window_dimensions = event.new_size
+        self._renderer.set_window_dimensions(event.new_size)
+
+    def _unsubscribe_events(self) -> None:
+        event_system = get_event_system()
+        event_system.unsubscribe("view_change_event", self._on_view_change)
+        event_system.unsubscribe("window_resize_event", self._on_window_resize)
+
 #region main loop
     def run(self) -> None:
-        clock: pygame.time.Clock = pygame.time.Clock()
         self._running = True
+        self._main_loop()
+
+    def _main_loop(self) -> None:
+        clock: pygame.time.Clock = pygame.time.Clock()
         while self._running:
             self._event_factory.process_pygame_events(pygame.event.get())
-            self.render()
+            self._render()
             pygame.display.flip()
             clock.tick(60)
         pygame.quit()
 
-    def render(self) -> None:
+    def _render(self) -> None:
         self._renderer.render()
 
 #region shutdown
+    @event_listener(event_type="quit_event")
     def close(self, event: QuitEvent) -> None:
         for callback in self._on_close_callbacks:
             callback()
         self._running = False
+        self._unsubscribe_events()

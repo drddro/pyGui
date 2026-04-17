@@ -8,7 +8,7 @@ class ReadOnlyError(AttributeError):
         super().__init__(f"{specification} was set, but it's read-only.")
 
 #region view change event
-@event_model(event_type="view_change")  # type: ignore[misc]
+@event_model(event_type="view_change_event")  # type: ignore[misc]
 class ViewChangeEvent:
     def __init__(self, view_id: str):
         self.has_view_id = view_id

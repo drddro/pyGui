@@ -10,10 +10,10 @@ from core.rendering.interfaces import HasView
 from core.rendering.renderer import Renderer
 from core.singletons.asset import AssetLoader
 
-from events.annotations import event_listener
+from events.annotations import event_listener, subscribes
 from events.system import get_event_system
 
-
+@subscribes
 class PyGui:
 
     def __init__(self, window_dimensions: Vector2 = Vector2(800, 800)):      
@@ -42,18 +42,13 @@ class PyGui:
         pygame.init()
         pygame.font.init()
 
-        event_system = get_event_system()
-        event_system.subscribe("view_change_event", self._on_view_change)
-        event_system.subscribe("window_resize_event", self._on_window_resize)
-        event_system.subscribe("quit_event", self.close)
-
         screen = pygame.display.set_mode(self._window_dimensions)
         self._asset_loader = AssetLoader().with_pygame_loader().build()
         self._renderer.set_assets_registry(self._asset_loader).set_window_dimensions(self._window_dimensions).set_screen(screen).build()
         return self
     
-    def add_on_close(self, on_exit: OnExit):
-        self._on_close_callbacks.append(on_exit.on_exit) # type: ignore
+    def add_on_close(self, on_exit: OnExit) -> 'PyGui':
+        self._on_close_callbacks.append(on_exit.on_exit)
         return self
     
     def add_has_view(self, has_view: HasView) -> 'PyGui':
@@ -74,7 +69,8 @@ class PyGui:
             else:
                 has_view = resolved_view
         
-        view = has_view.get_view()  #type: ignore - has_view is guaranteed to be not None by the checks above
+        assert has_view is not None
+        view = has_view.get_view()
         self._renderer.set_view(view, self._window_dimensions)
 
 
@@ -88,11 +84,6 @@ class PyGui:
     def _on_window_resize(self, event: WindowResizeEvent) -> None:
         self._window_dimensions = event.new_size
         self._renderer.set_window_dimensions(event.new_size)
-
-    def _unsubscribe_events(self) -> None:
-        event_system = get_event_system()
-        event_system.unsubscribe("view_change_event", self._on_view_change)
-        event_system.unsubscribe("window_resize_event", self._on_window_resize)
 
 #region main loop
     def run(self) -> None:
@@ -112,9 +103,15 @@ class PyGui:
         self._renderer.render()
 
 #region shutdown
+    def unsubscribe_all(self) -> None:
+        event_system = get_event_system()
+        event_system.unsubscribe("view_change_event", self._on_view_change)
+        event_system.unsubscribe("window_resize_event", self._on_window_resize)
+        event_system.unsubscribe("quit_event", self.close)
+
     @event_listener(event_type="quit_event")
     def close(self, event: QuitEvent) -> None:
         for callback in self._on_close_callbacks:
             callback()
         self._running = False
-        self._unsubscribe_events()
+        self.unsubscribe_all()

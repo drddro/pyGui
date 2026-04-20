@@ -8,7 +8,7 @@ class ReadOnlyError(AttributeError):
         super().__init__(f"{specification} was set, but it's read-only.")
 
 #region view change event
-@event_model(event_type="view_change_event")  # type: ignore[misc]
+@event_model(event_type="view_change_event")
 class ViewChangeEvent:
     def __init__(self, view_id: str):
         self.has_view_id = view_id
@@ -21,9 +21,9 @@ class MouseButtons(IntEnum):
     SCROLL_UP = 4
     SCROLL_DOWN = 5
 
-@event_model(event_type="mouse_event")  # type: ignore[misc]
+@event_model(event_type="mouse_event")
 class MouseEvent:
-    def __init__(self, pos: Vector2, buttons: list[MouseButtons]): #type to determine later
+    def __init__(self, pos: Vector2, buttons: list[MouseButtons]):
         self._pos = pos
         self._buttons = buttons
 
@@ -44,9 +44,9 @@ class MouseEvent:
         raise ReadOnlyError("MouseEvent.buttons")
 
 #region keyboard event
-@event_model(event_type="keyboard_event")  # type: ignore[misc]
+@event_model(event_type="keyboard_event")
 class KeyboardEvent:
-    def __init__(self, unicode: str): #type to determine later
+    def __init__(self, unicode: str):
         self._unicode = unicode
 
     @property
@@ -59,15 +59,15 @@ class KeyboardEvent:
 
 
 #region quit event
-@event_model(event_type="quit_event")  # type: ignore[misc]
+@event_model(event_type="quit_event")
 class QuitEvent:
     def __init__(self):
         pass
 
 #region window resize event
-@event_model(event_type="window_resize_event")  # type: ignore[misc]
+@event_model(event_type="window_resize_event")
 class WindowResizeEvent:
-    def __init__(self, new_size: Vector2): # type: ignore #type to determine later
+    def __init__(self, new_size: Vector2):
         self._new_size = new_size
 
     @property

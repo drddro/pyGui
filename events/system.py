@@ -1,66 +1,47 @@
-from typing import Any, Callable
 
-event_system_instance: '_EventSystem | None' = None
+from collections.abc import Callable
 
-def get_event_system() -> '_EventSystem':
-    global event_system_instance
-    if event_system_instance is None:
-        event_system_instance = _EventSystem()
-    return event_system_instance
+class EventError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
 
+_event_system: 'EventSystem | None' = None
 
-class _Subscriptions:
+def get_event_system() -> 'EventSystem':
+    global _event_system
+    if _event_system is None:
+        _event_system = EventSystem()
+    return _event_system
 
-    def __init__(self, callback: Callable[..., None], target: Any):
-        self.callback = callback
-        self.target = target
-
-class _EventSystem:
-
+class EventSystem:
 
     def __init__(self):
-        self._subscriptions: dict[str, list[_Subscriptions]] = {}
+        self._event_types: dict[str, type] = {}
+        self._listeners: dict[str, list[Callable[..., object]]] = {}
 
-    def subscribe(self, event_type: str, callback: Callable[..., None], target: Any = None):
-        if event_type not in self._subscriptions:
-            self._subscriptions[event_type] = []
-        elif self._is_already_subscribed(event_type, callback, target):
+    def register_event_type(self, event_type: str, model_cls: type) -> None:
+        if self.is_registered_event_type(event_type):
             return
-        self._subscriptions[event_type].append(_Subscriptions(callback, target))
+        self._event_types[event_type] = model_cls
+        self._listeners[event_type] = []
 
-    def unsubscribe(self, event_type: str, callback: Callable[..., None]):
-        if not event_type in self._subscriptions:
-            raise ValueError(f"No subscriptions for event type '{event_type}'")
-        subscribers = self._subscriptions[event_type]
+    def is_registered_event_type(self, event_type: str) -> bool:
+        return event_type in self._event_types
 
-        subscriber_to_remove: _Subscriptions | None = None
-        for subscription in subscribers:
-            if subscription.callback == callback:
-                subscriber_to_remove = subscription
-                return
-            
-        if subscriber_to_remove is not None:
-            subscribers.remove(subscriber_to_remove)
-            return
-        
-        raise ValueError(f"No subscription for event type '{event_type}' with callback '{callback}'")
-    
-    def fire(self, event: object):
-        if not hasattr(type(event), "_is_event_model"):
-            raise ValueError(f"Event must be an event model")
-        event_type = getattr(event, "type", None)
+    def fire(self, event: object) -> None:
+        event_type = getattr(event, "_event_type", None)
         if event_type is None:
-            raise ValueError(f"Event model must have a 'type' attribute")
-        if event_type not in self._subscriptions:
-            return
-        for subscription in self._subscriptions[event_type]:
-            if subscription.target is None or subscription.target == getattr(event, "target", None):
-                subscription.callback(event)
+            raise EventError(f"Event model {type(event).__name__} is missing _event_type attribute")
+        if not self.is_registered_event_type(event_type):
+            raise EventError(f"Event type '{event_type}' is not registered")
+        for listener in self._listeners[event_type]:
+            listener(event)
 
-    def _is_already_subscribed(self, event_type: str, callback: Callable[..., None], target: Any) -> bool:
-        if event_type not in self._subscriptions:
-            return False
-        for subscription in self._subscriptions[event_type]:
-            if subscription.callback == callback and subscription.target == target:
-                return True
-        return False
+    def subscribe(self, event_type: str, listener: Callable[..., object]) -> None:
+        self._listeners.setdefault(event_type, []).append(listener)
+
+    def unsubscribe(self, event_type: str, listener: Callable[..., object]) -> None:
+        listeners = self._listeners.get(event_type)
+        if listeners is None:
+            raise EventError(f"No listeners registered for event type '{event_type}'")
+        self._listeners[event_type] = [l for l in listeners if l is not listener]

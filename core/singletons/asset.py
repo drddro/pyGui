@@ -49,7 +49,8 @@ class AssetLoader:
         
     def _load_from_file(self, file_path: str) -> Surface:
         from os import path
-        file_type = path.split('.')[-1]
+        _, extension = path.splitext(file_path)
+        file_type = extension.removeprefix('.').lower()
         for loader in self._loaders:
             if loader.supports_file_type(file_type):
                 return loader.load(file_path)

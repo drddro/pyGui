@@ -1,4 +1,4 @@
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from pygame import Vector2
 
 from events.annotations import event_model
@@ -21,11 +21,25 @@ class MouseButtons(IntEnum):
     SCROLL_UP = 4
     SCROLL_DOWN = 5
 
+
+class MouseEventAction(StrEnum):
+    DOWN = 'down'
+    UP = 'up'
+    MOVE = 'move'
+
 @event_model(event_type="mouse_event")
 class MouseEvent:
-    def __init__(self, pos: Vector2, buttons: list[MouseButtons]):
+    def __init__(
+        self,
+        pos: Vector2,
+        buttons: list[MouseButtons],
+        action: MouseEventAction,
+        trigger_button: MouseButtons | None = None,
+    ):
         self._pos = pos
         self._buttons = buttons
+        self._action = action
+        self._trigger_button = trigger_button
 
     @property
     def pos(self) -> Vector2:
@@ -43,11 +57,34 @@ class MouseEvent:
     def buttons(self, value: list[MouseButtons]):
         raise ReadOnlyError("MouseEvent.buttons")
 
+    @property
+    def action(self) -> MouseEventAction:
+        return self._action
+
+    @action.setter
+    def action(self, value: MouseEventAction):
+        raise ReadOnlyError("MouseEvent.action")
+
+    @property
+    def trigger_button(self) -> MouseButtons | None:
+        return self._trigger_button
+
+    @trigger_button.setter
+    def trigger_button(self, value: MouseButtons | None):
+        raise ReadOnlyError("MouseEvent.trigger_button")
+
 #region keyboard event
+class KeyboardEventAction(StrEnum):
+    DOWN = 'down'
+    UP = 'up'
+
+
 @event_model(event_type="keyboard_event")
 class KeyboardEvent:
-    def __init__(self, unicode: str):
+    def __init__(self, unicode: str, key: int, action: KeyboardEventAction):
         self._unicode = unicode
+        self._key = key
+        self._action = action
 
     @property
     def unicode(self) -> str:
@@ -56,6 +93,22 @@ class KeyboardEvent:
     @unicode.setter
     def unicode(self, value: str):
         raise ReadOnlyError("KeyboardEvent.unicode")
+
+    @property
+    def key(self) -> int:
+        return self._key
+
+    @key.setter
+    def key(self, value: int):
+        raise ReadOnlyError("KeyboardEvent.key")
+
+    @property
+    def action(self) -> KeyboardEventAction:
+        return self._action
+
+    @action.setter
+    def action(self, value: KeyboardEventAction):
+        raise ReadOnlyError("KeyboardEvent.action")
 
 
 #region quit event

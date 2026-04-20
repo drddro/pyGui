@@ -3,11 +3,11 @@ from collections.abc import Callable
 import pygame
 from pygame import Vector2
 
-from core.event_factory import PyGuiEventFactory
+from core.singletons.event_factory import PyGuiEventFactory
 from core.event_models import QuitEvent, ViewChangeEvent, WindowResizeEvent
 from core.lifecycle_interface import OnExit
-from core.rendering.interfaces import HasView
-from core.rendering.renderer import Renderer
+from core.singletons.rendering.interfaces import HasView
+from core.singletons.rendering.renderer import Renderer
 from core.singletons.asset import AssetLoader
 
 from events.annotations import event_listener, subscribes

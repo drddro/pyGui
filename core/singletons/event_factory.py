@@ -2,7 +2,7 @@ from typing import Any
 
 import pygame
 
-from core.event_models import KeyboardEvent, MouseButtons, MouseEvent, QuitEvent, WindowResizeEvent
+from core.event_models import KeyboardEvent, KeyboardEventAction, MouseButtons, MouseEvent, MouseEventAction, QuitEvent, WindowResizeEvent
 from events.annotations import event_source
 
 class PyGuiEventFactory:
@@ -64,11 +64,14 @@ class PyGuiEventFactory:
         pos = pygame.Vector2(event.pos)
         raw_buttons = event.buttons if hasattr(event, 'buttons') else event.button
         buttons = self._convert_pygame_mouse_buttons(raw_buttons)
-        return MouseEvent(pos, buttons)
+        action = self._resolve_mouse_action(event)
+        trigger_button = self._resolve_trigger_button(event)
+        return MouseEvent(pos, buttons, action, trigger_button)
     
     @event_source(event_type="keyboard_event")
     def _emit_keyboard_event(self, event: pygame.event.Event) -> KeyboardEvent:
-        return KeyboardEvent(event.unicode)
+        action = KeyboardEventAction.DOWN if event.type == pygame.KEYDOWN else KeyboardEventAction.UP
+        return KeyboardEvent(event.unicode, event.key, action)
     
     @event_source(event_type="quit_event")
     def _emit_quit_event(self) -> QuitEvent:
@@ -78,3 +81,19 @@ class PyGuiEventFactory:
     @event_source(event_type="window_resize_event")
     def _emit_window_resize_event(self, data: Any):
         return WindowResizeEvent(data)
+
+    def _resolve_mouse_action(self, event: pygame.event.Event) -> MouseEventAction:
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            return MouseEventAction.DOWN
+        if event.type == pygame.MOUSEBUTTONUP:
+            return MouseEventAction.UP
+        return MouseEventAction.MOVE
+
+    def _resolve_trigger_button(self, event: pygame.event.Event) -> MouseButtons | None:
+        raw_button = getattr(event, 'button', None)
+        if not isinstance(raw_button, int):
+            return None
+        try:
+            return self._convert_keycode_to_mouse_button(raw_button)
+        except ValueError:
+            return None

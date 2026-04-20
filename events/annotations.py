@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, ParamSpec, TypeVar, cast
+from typing import Any, ParamSpec, Self, TypeVar, cast
 from events.system import EventError, get_event_system
 
 P = ParamSpec("P")
@@ -24,11 +24,13 @@ class Subscription:
 class _EventMixin:
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
-        cls._event_listeners = {
-            method._of_event_type: method  # type:ignore
-            for method in vars(cls).values()
-            if callable(method) and getattr(method, "_is_event_listener", False)
-        }
+        event_listeners: dict[str, Callable[..., object]] = {}
+        for base in reversed(cls.__mro__):
+            for method in vars(base).values():
+                if callable(method) and getattr(method, "_is_event_listener", False):
+                    event_type = cast(str, getattr(method, "_of_event_type", ""))
+                    event_listeners[event_type] = method
+        cls._event_listeners = event_listeners
 
     def __init__(self):
         self._subscriptions: dict[str, Subscription] = {}
@@ -59,6 +61,8 @@ def _inject_event_machinery(cls: TClass) -> TClass:
     def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
         if callable(original_init):
             original_init(self, *args, **kwargs)
+        else:
+            super(cls, self).__init__(*args, **kwargs)
         _EventMixin.__init__(self)
 
     attrs = dict(cls.__dict__)
@@ -89,19 +93,19 @@ def subscribes(cls: TClass) -> TClass:
     return _inject_event_machinery(cls)
 
 
-def event_source(*, event_type: str) -> Callable:                                               # type: ignore
-    def event_source_decorator(func: Callable) -> Callable:                                     # type: ignore
-        @wraps(func)                                                                    # type: ignore
-        def wrapper(self, *args: Any, **kwargs: Any) -> Any:                                    # type: ignore
-            event = func(self, *args, **kwargs)                                            # type: ignore                                     
-            if not hasattr(event, "_event_type") or event._event_type != event_type:   # type: ignore
+def event_source(*, event_type: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    def event_source_decorator(func: Callable[P, R]) -> Callable[P, R]:
+        @wraps(func)
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> R:
+            event: R = func(self, *args, **kwargs)
+            if not hasattr(event, "_event_type") or getattr(event, "_event_type", None) != event_type:
                 raise EventError(
                     f"Expected event model of type '{event_type}', "
-                    f"got {type(event).__name__}"                                               # type: ignore
+                    f"got {type(event).__name__}"
                 )
             event_system = get_event_system()
             if event_system.is_registered_event_type(event_type):
-                event_system.fire(event)                                                  # type: ignore
-            return event                                                                        # type: ignore
-        return wrapper                                                                          # type: ignore
-    return event_source_decorator                                                               # type: ignore
+                event_system.fire(event)
+            return event
+        return wrapper  # type: ignore[return-value]
+    return event_source_decorator

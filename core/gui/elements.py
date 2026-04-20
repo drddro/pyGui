@@ -629,12 +629,12 @@ class UITextBlock(UIElement):
 
         line_heights = [line.get_height() for line in rendered_lines]
         content_height = sum(line_heights) + max(0, len(rendered_lines) - 1) * self._line_spacing
-        start_y = self._padding + _resolve_alignment_offset(content_height, max(1, int(own_area.y - (self._padding * 2))), self._vertical_align)
+        start_y = self._padding + _resolve_alignment_offset(content_height, max(1, int(own_area.y - (self._padding * 2))), self._vertical_align) # type: ignore
 
         current_y = start_y
         available_width = max(1, int(own_area.x - (self._padding * 2)))
         for rendered_line in rendered_lines:
-            start_x = self._padding + _resolve_alignment_offset(rendered_line.get_width(), available_width, self._horizontal_align)
+            start_x = self._padding + _resolve_alignment_offset(rendered_line.get_width(), available_width, self._horizontal_align) # type: ignore
             surface.blit(rendered_line, (start_x, current_y))
             current_y += rendered_line.get_height() + self._line_spacing
 

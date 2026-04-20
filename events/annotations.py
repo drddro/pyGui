@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, ParamSpec, Self, TypeVar, cast
+from typing import Any, ParamSpec, TypeVar, cast
 from events.system import EventError, get_event_system
 
 P = ParamSpec("P")
@@ -97,15 +97,15 @@ def event_source(*, event_type: str) -> Callable[[Callable[P, R]], Callable[P, R
     def event_source_decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
         def wrapper(self: Any, *args: Any, **kwargs: Any) -> R:
-            event: R = func(self, *args, **kwargs)
-            if not hasattr(event, "_event_type") or getattr(event, "_event_type", None) != event_type:
+            event: R = func(self, *args, **kwargs) # type: ignore
+            if not hasattr(event, "_event_type") or getattr(event, "_event_type", None) != event_type: # type: ignore
                 raise EventError(
                     f"Expected event model of type '{event_type}', "
-                    f"got {type(event).__name__}"
+                    f"got {type(event).__name__}" # type: ignore
                 )
             event_system = get_event_system()
             if event_system.is_registered_event_type(event_type):
-                event_system.fire(event)
-            return event
+                event_system.fire(event) # type: ignore
+            return event # type: ignore
         return wrapper  # type: ignore[return-value]
     return event_source_decorator

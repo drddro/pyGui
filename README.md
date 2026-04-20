@@ -19,7 +19,7 @@ PyGui is a lightweight pygame-based UI framework with:
 ## Project Structure
 
 - `core/pygui.py`: Main app lifecycle and main loop
-- `core/event_factory.py`: Converts pygame events into framework event models
+- `core/singeltons/event_factory.py`: Converts pygame events into framework event models
 - `core/event_models.py`: Typed event model definitions
 - `events/annotations.py`: Decorators (`@event_model`, `@event_source`, `@event_listener`, `@subscribes`)
 - `events/system.py`: Event bus implementation
@@ -293,9 +293,3 @@ A good default is exactly what `example_app.py` now does: dispose all view eleme
 ### Text input does not type
 
 - Click the `UITextInput` first (focus required)
-
-## Contributing Ideas
-
-- Add weighting support to `UIDivision` (non-equal child splits)
-- Add optional z-index and event capture order controls
-- Add unit tests for event-disposal behavior

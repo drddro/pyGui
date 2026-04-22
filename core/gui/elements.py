@@ -720,39 +720,42 @@ class UIButton(UIInteractiveElement):
 
     def __init__(
         self,
-        text: str,
+        content: UIElement | None,
         on_click: Callable[[], None] | None = None,
         relative_size: Vector2 | None = None,
-        font: pygame.font.Font | None = None,
-        text_color: ColorValue = (255, 255, 255),
         background_color: ColorValue = (45, 125, 210),
         hover_color: ColorValue = (55, 145, 230),
         pressed_color: ColorValue = (35, 100, 180),
         border_color: ColorValue | None = (20, 60, 110),
         border_width: int = 1,
         corner_radius: int = 6,
+        content_padding: int = 8,
     ):
         super().__init__(relative_size)
-        self._text = text
+        self._content = content
         self._on_click = on_click
-        self._font = font or pygame.font.SysFont('Arial', 20)
-        self._text_color = text_color
         self._background_color = background_color
         self._hover_color = hover_color
         self._pressed_color = pressed_color
         self._border_color = border_color
         self._border_width = border_width
         self._corner_radius = corner_radius
+        self._content_padding = content_padding
         self._hovered = False
         self._pressed = False
 
-    def set_text(self, text: str) -> 'UIButton':
-        self._text = text
+    def set_content(self, content: UIElement | None) -> 'UIButton':
+        self._content = content
         return self
 
     def set_on_click(self, on_click: Callable[[], None] | None) -> 'UIButton':
         self._on_click = on_click
         return self
+
+    def dispose(self) -> None:
+        if self._content is not None:
+            self._content.dispose()
+        super().dispose()
 
     def handle_event(self, event: object) -> bool:
         if isinstance(event, MouseEvent):
@@ -792,9 +795,15 @@ class UIButton(UIInteractiveElement):
 
         _draw_box(surface, current_color, self._border_color, self._border_width, self._corner_radius)
 
-        label_surface = self._font.render(self._text, True, self._text_color)
-        label_rect = label_surface.get_rect(center=(own_area.x / 2, own_area.y / 2))
-        surface.blit(label_surface, label_rect)
+        if self._content is not None:
+            content_area = _safe_inner_area(own_area, self._content_padding)
+            content_position = self.get_position() + Vector2(self._content_padding, self._content_padding)
+            self._content.set_position(content_position)
+            self._content._set_forced_area(content_area)
+            content_surface = self._content.get_surface(asset_loader, content_area)
+            self._content._clear_forced_area()
+            surface.blit(content_surface, (self._content_padding, self._content_padding))
+
         return surface
 
 

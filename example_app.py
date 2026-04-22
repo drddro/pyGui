@@ -58,8 +58,12 @@ def _quit() -> None:
     get_event_system().fire(QuitEvent())
 
 
+def _button_label(text: str, text_color: tuple[int, int, int] = (255, 255, 255)) -> UILabel:
+    return UILabel(text, background_color=None, text_color=text_color)
+
+
 def _nav_button(label: str, target_view: str, current_view: str) -> UIButton:
-    button = UIButton(label, on_click=lambda: _navigate(target_view))
+    button = UIButton(_button_label(label), on_click=lambda: _navigate(target_view))
     if target_view == current_view:
         button.set_enabled(False)
     return button
@@ -73,7 +77,7 @@ def _build_navigation(current_view: str) -> UIGrid:
             _nav_button('Media', MEDIA_VIEW_ID, current_view),
             _nav_button('Input', INPUT_VIEW_ID, current_view),
             _nav_button('Scroll', SCROLL_VIEW_ID, current_view),
-            UIButton('Quit', on_click=_quit, background_color=(150, 55, 55), hover_color=(175, 70, 70), pressed_color=(120, 45, 45)),
+            UIButton(_button_label('Quit'), on_click=_quit, background_color=(150, 55, 55), hover_color=(175, 70, 70), pressed_color=(120, 45, 45)),
         ],
         columns=3,
         rows=2,
@@ -214,8 +218,8 @@ class HomeView(DemoView):
                 UIPanel(
                     UIDivision(
                         [
-                            UIButton('Open Layout View', on_click=lambda: _navigate(LAYOUT_VIEW_ID)),
-                            UIButton('Open Input View', on_click=lambda: _navigate(INPUT_VIEW_ID)),
+                            UIButton(_button_label('Open Layout View'), on_click=lambda: _navigate(LAYOUT_VIEW_ID)),
+                            UIButton(_button_label('Open Input View'), on_click=lambda: _navigate(INPUT_VIEW_ID)),
                         ]
                     ).set_direction('vertical').set_gap(8),
                     background_color=(237, 243, 247),
@@ -360,7 +364,7 @@ class InputView(DemoView):
 
         controls = UIDivision(
             [
-                UIPanel(UIButton('Return Home', on_click=lambda: _navigate(HOME_VIEW_ID)), background_color=(240, 236, 225), corner_radius=10),
+                UIPanel(UIButton(_button_label('Return Home'), on_click=lambda: _navigate(HOME_VIEW_ID)), background_color=(240, 236, 225), corner_radius=10),
                 UIPanel(checkbox, background_color=(246, 246, 240), corner_radius=10),
                 UIPanel(toggle, background_color=(231, 243, 231), corner_radius=10),
                 UIPanel(slider, background_color=(233, 239, 246), corner_radius=10),
@@ -388,7 +392,7 @@ class ScrollViewDemo(DemoView):
             [
                 UIPanel(UILabel('Scrollable Content', background_color=None), background_color=(239, 240, 232), corner_radius=10),
                 UIPanel(UITextBlock('This scroll view contains multiple labels, text blocks, and buttons inside a tall UIDivision.', background_color=None, horizontal_align='start', vertical_align='start'), background_color=(247, 244, 236), corner_radius=10),
-                UIPanel(UIButton('Jump To Media View', on_click=lambda: _navigate(MEDIA_VIEW_ID)), background_color=(231, 240, 248), corner_radius=10),
+                UIPanel(UIButton(_button_label('Jump To Media View'), on_click=lambda: _navigate(MEDIA_VIEW_ID)), background_color=(231, 240, 248), corner_radius=10),
                 UIPanel(UILabel('Item 1')),
                 UIPanel(UILabel('Item 2')),
                 UIPanel(UILabel('Item 3')),

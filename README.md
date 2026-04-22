@@ -206,7 +206,7 @@ Interactive elements subscribe to `mouse_event` and/or `keyboard_event` automati
 #### UIButton
 
 ```python
-button = UIButton('Click me', on_click=lambda: print('clicked'))
+button = UIButton(UILabel('Click me', background_color=None), on_click=lambda: print('clicked'))
 ```
 
 #### UICheckbox
@@ -251,8 +251,8 @@ class MenuView(View):
     def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'MenuView':
         self._root = UIDivision([
             UILabel('Main Menu'),
-            UIButton('Start', on_click=lambda: print('start')),
-            UIButton('Quit', on_click=lambda: print('quit')),
+            UIButton(UILabel('Start', background_color=None), on_click=lambda: print('start')),
+            UIButton(UILabel('Quit', background_color=None), on_click=lambda: print('quit')),
         ]).set_direction('vertical').set_gap(12)
         return self
 

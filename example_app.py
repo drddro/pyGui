@@ -1,13 +1,35 @@
-from abc import ABC, abstractmethod
+"""Example app showcasing every PyGui UI element.
 
+Run with:
+
+    python example_app.py
+
+Layout overview:
+    - Header:  UILabel
+    - Left:    UIPanel wrapping the interactive widgets
+               (UIButton, UICheckbox, UIToggle, UISlider, UITextInput,
+                UIProgressBar) plus live UILabels that echo their state
+    - Right:   UIScrollView over non-interactive content
+               (UITextBlock, UIGrid of UIPanels, UIOverlay, UIImage)
+    - Footer:  UILabel status + UISpacer + a Quit UIButton
+
+Note: interactive elements subscribe to the event bus the moment they are
+constructed, so the view only has to render the tree every frame -- the
+positions used for hit-testing are refreshed during rendering. Interactive
+widgets are intentionally kept out of the UIScrollView, because a scroll view
+also forwards mouse events to its child; an interactive child would then be
+processed twice (once from the bus, once from the forwarded event).
+"""
+
+import os
+
+import pygame
 from pygame import Surface, Vector2
 
-from core.event_models import QuitEvent, ViewChangeEvent
 from core.gui.elements import (
     UIButton,
     UICheckbox,
     UIDivision,
-    UIElement,
     UIGrid,
     UIImage,
     UILabel,
@@ -22,106 +44,107 @@ from core.gui.elements import (
     UIToggle,
 )
 from core.pygui import PyGui
-from core.singletons.rendering.interfaces import HasView, View
 from core.singletons.asset import AssetLoader
-from events.system import get_event_system
+from core.singletons.rendering.interfaces import HasView, View
 
 
-HOME_VIEW_ID = 'home_view'
-LAYOUT_VIEW_ID = 'layout_view'
-MEDIA_VIEW_ID = 'media_view'
-INPUT_VIEW_ID = 'input_view'
-SCROLL_VIEW_ID = 'scroll_view'
-
-DEMO_IMAGE_PATH = 'assets/demo_showcase.png'
+#region generated demo asset
+ASSET_DIR = os.path.join(os.path.dirname(__file__), 'assets')
+DEMO_IMAGE_PATH = os.path.join(ASSET_DIR, 'demo_gradient.png')
 
 
-def main() -> None:
-    py_gui = PyGui(window_dimensions=Vector2(1100, 760))
-    py_gui.initialize()
+def _ensure_demo_image() -> str:
+    """Generate a small gradient PNG so UIImage has something to load."""
+    if os.path.exists(DEMO_IMAGE_PATH):
+        return DEMO_IMAGE_PATH
 
-    py_gui.add_has_view(DemoHasView(HOME_VIEW_ID, HomeView()))
-    py_gui.add_has_view(DemoHasView(LAYOUT_VIEW_ID, LayoutView()))
-    py_gui.add_has_view(DemoHasView(MEDIA_VIEW_ID, MediaView()))
-    py_gui.add_has_view(DemoHasView(INPUT_VIEW_ID, InputView()))
-    py_gui.add_has_view(DemoHasView(SCROLL_VIEW_ID, ScrollViewDemo()))
+    os.makedirs(ASSET_DIR, exist_ok=True)
+    width, height = 360, 220
+    surface = pygame.Surface((width, height))
+    top = (60, 130, 220)
+    bottom = (150, 70, 200)
+    for y in range(height):
+        t = y / max(1, height - 1)
+        color = (
+            int(top[0] + (bottom[0] - top[0]) * t),
+            int(top[1] + (bottom[1] - top[1]) * t),
+            int(top[2] + (bottom[2] - top[2]) * t),
+        )
+        pygame.draw.line(surface, color, (0, y), (width, y))
 
-    py_gui.set_active_view(HOME_VIEW_ID)
-    py_gui.run()
-
-
-def _navigate(view_id: str) -> None:
-    get_event_system().fire(ViewChangeEvent(view_id))
-
-
-def _quit() -> None:
-    get_event_system().fire(QuitEvent())
-
-
-def _button_label(text: str, text_color: tuple[int, int, int] = (255, 255, 255)) -> UILabel:
-    return UILabel(text, background_color=None, text_color=text_color)
-
-
-def _nav_button(label: str, target_view: str, current_view: str) -> UIButton:
-    button = UIButton(_button_label(label), on_click=lambda: _navigate(target_view))
-    if target_view == current_view:
-        button.set_enabled(False)
-    return button
+    center = (width // 2, height // 2)
+    pygame.draw.circle(surface, (255, 255, 255), center, 46)
+    pygame.draw.circle(surface, (40, 40, 60), center, 46, 4)
+    pygame.image.save(surface, DEMO_IMAGE_PATH)
+    return DEMO_IMAGE_PATH
 
 
-def _build_navigation(current_view: str) -> UIGrid:
-    return UIGrid(
-        [
-            _nav_button('Home', HOME_VIEW_ID, current_view),
-            _nav_button('Layout', LAYOUT_VIEW_ID, current_view),
-            _nav_button('Media', MEDIA_VIEW_ID, current_view),
-            _nav_button('Input', INPUT_VIEW_ID, current_view),
-            _nav_button('Scroll', SCROLL_VIEW_ID, current_view),
-            UIButton(_button_label('Quit'), on_click=_quit, background_color=(150, 55, 55), hover_color=(175, 70, 70), pressed_color=(120, 45, 45)),
-        ],
-        columns=3,
-        rows=2,
-    ).set_gap(8)
+#endregion
 
 
-class DemoHasView(HasView):
+#region showcase view
+class ShowcaseView(View):
 
-    def __init__(self, view_id: str, view: View) -> None:
-        self._view_id = view_id
-        self._view = view
+    def __init__(self):
+        self._root: UIDivision | None = None
+        # Live widgets kept as references so callbacks can mutate them.
+        self._status_label: UILabel | None = None
+        self._slider_value_label: UILabel | None = None
+        self._progress: UIProgressBar | None = None
+        self._input_echo: UILabel | None = None
+        self._click_count = 0
 
-    def get_view(self) -> View:
-        return self._view
+    #region lifecycle
+    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'ShowcaseView':
+        _ensure_demo_image()
 
-    def get_id(self) -> str:
-        return self._view_id
+        title_font = pygame.font.SysFont('Arial', 30, bold=True)
+        section_font = pygame.font.SysFont('Arial', 22, bold=True)
 
+        self._status_label = UILabel(
+            'Interact with the widgets on the left...',
+            background_color=None,
+            text_color=(235, 235, 235),
+        )
+        self._slider_value_label = UILabel(
+            'Slider value: 35',
+            background_color=None,
+            text_color=(30, 30, 30),
+        )
+        self._input_echo = UILabel(
+            'You typed: (click the field first)',
+            background_color=None,
+            text_color=(30, 30, 30),
+        )
+        self._progress = UIProgressBar(
+            progress=0.35,
+            fill_color=(55, 130, 220),
+            corner_radius=6,
+            show_percentage=True,
+        )
 
-class DemoView(View, ABC):
+        header = UILabel(
+            'PyGui - UI Element Showcase',
+            relative_size=Vector2(1, 0.12),
+            font=title_font,
+            background_color=None,
+            text_color=(240, 240, 240),
+        )
 
-    def __init__(self, view_id: str, title: str, description: str) -> None:
-        self._view_id = view_id
-        self._title = title
-        self._description = description
-        self._root: UIElement | None = None
+        body = UIDivision([
+            self._build_interactive_panel(section_font),
+            self._build_scroll_panel(section_font),
+        ], relative_size=Vector2(1, 0.74)).set_direction('horizontal').set_gap(16)
 
-    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'DemoView':
-        self._root = self.build_body(area)
+        footer = self._build_footer()
+
+        self._root = UIDivision([header, body, footer]).set_direction('vertical').set_gap(12)
         return self
 
-    def render(
-        self,
-        surface: Surface,
-        area: Vector2,
-        asset_loader: AssetLoader,
-    ) -> Surface:
-        if self._root is None:
-            self._root = self.build_body(area)
-
-        assert self._root is not None
-        self._root.set_position(Vector2(0, 0))
-        root_surface = self._root.get_surface(asset_loader, area)
-        surface.blit(root_surface, (0, 0))
+    def render(self, surface: Surface, area: Vector2, asset_loader: AssetLoader) -> Surface:
+        if self._root is not None:
+            self._root.set_position(Vector2(0, 0))
+            surface.blit(self._root.get_surface(asset_loader, area), (0, 0))
         return surface
 
     def set_passive(self) -> None:
@@ -130,291 +153,168 @@ class DemoView(View, ABC):
             self._root = None
 
     def load_assets_from_file(self, asset_loader: AssetLoader) -> None:
-        pass
+        _ensure_demo_image()
 
-    def _wrap_in_page(self, body: UIElement) -> UIElement:
-        title_panel = UIPanel(
-            UILabel(
-                self._title,
-                text_color=(20, 20, 20),
-                background_color=None,
-            ),
-            background_color=(240, 236, 225),
-            corner_radius=12,
-            padding=12,
-            border_color=(70, 70, 70),
-            relative_size=Vector2(1, 0.8),
+    #region left column (interactive)
+    def _build_interactive_panel(self, section_font: pygame.font.Font) -> UIPanel:
+        click_button = UIButton(
+            UILabel('Click me', background_color=None, text_color=(255, 255, 255)),
+            on_click=self._on_click,
         )
 
-        description_panel = UIPanel(
-            UITextBlock(
-                self._description,
-                background_color=None,
-                horizontal_align='start',
-                vertical_align='start',
-                padding=10,
-            ),
-            background_color=(248, 247, 242),
-            corner_radius=12,
-            padding=8,
-            border_color=(110, 110, 110),
-            relative_size=Vector2(1, 1.15),
-        )
+        checkbox = UICheckbox('Enable shadows', checked=True, on_change=self._on_checkbox)
 
-        body.set_relative_size(Vector2(1, 3.2))
+        toggle_row = UIDivision([
+            UILabel('Dark mode', relative_size=Vector2(0.6, 1), background_color=None, text_color=(30, 30, 30)),
+            UIToggle(checked=False, on_change=self._on_toggle, relative_size=Vector2(0.4, 1)),
+        ]).set_direction('horizontal')
 
-        navigation_panel = UIPanel(
-            _build_navigation(self._view_id),
-            background_color=(232, 240, 244),
-            corner_radius=12,
-            padding=10,
-            border_color=(60, 90, 110),
-            relative_size=Vector2(1, 2.2),
-        )
+        slider = UISlider(minimum=0, maximum=100, value=35, on_change=self._on_slider)
 
-        return UIDivision(
-            [
-                title_panel,
-                description_panel,
-                body,
-                navigation_panel,
-            ]
-        ).set_direction('vertical').set_gap(10)
+        text_input = UITextInput(placeholder='Type something...', on_change=self._on_input)
 
-    @abstractmethod
-    def build_body(self, area: Vector2) -> UIElement:
-        pass
+        column = UIDivision([
+            UILabel('Interactive', font=section_font, background_color=None, text_color=(20, 20, 20)),
+            click_button,
+            checkbox,
+            toggle_row,
+            slider,
+            self._slider_value_label,
+            text_input,
+            self._input_echo,
+            self._progress,
+        ]).set_direction('vertical').set_gap(10)
 
-
-class HomeView(DemoView):
-
-    def __init__(self) -> None:
-        super().__init__(
-            HOME_VIEW_ID,
-            'PyGui Showcase',
-            'This demo app contains multiple views. Use the navigation buttons below to inspect every UI element in the framework.',
-        )
-
-    def build_body(self, area: Vector2) -> UIElement:
-        hero_overlay = UIOverlay(
-            [
-                UIImage(DEMO_IMAGE_PATH),
-                UILabel('UIOverlay + UIImage + UILabel', text_color=(255, 255, 255), background_color=None),
-            ]
-        )
-
-        info_column = UIDivision(
-            [
-                UIPanel(
-                    UITextBlock(
-                        'Views are regular objects implementing the View interface. Interactive widgets subscribe to the event system automatically and are cleaned up when the view goes passive.',
-                        background_color=None,
-                        horizontal_align='start',
-                        vertical_align='start',
-                    ),
-                    background_color=(245, 245, 239),
-                    corner_radius=10,
-                ),
-                UIPanel(
-                    UIDivision(
-                        [
-                            UIButton(_button_label('Open Layout View'), on_click=lambda: _navigate(LAYOUT_VIEW_ID)),
-                            UIButton(_button_label('Open Input View'), on_click=lambda: _navigate(INPUT_VIEW_ID)),
-                        ]
-                    ).set_direction('vertical').set_gap(8),
-                    background_color=(237, 243, 247),
-                    corner_radius=10,
-                ),
-            ]
-        ).set_direction('vertical').set_gap(10)
-
-        body = UIGrid([hero_overlay, info_column], columns=2, rows=1).set_gap(10)
-        return self._wrap_in_page(body)
-
-
-class LayoutView(DemoView):
-
-    def __init__(self) -> None:
-        super().__init__(
-            LAYOUT_VIEW_ID,
-            'Layout Elements',
-            'This view demonstrates UIDivision, UIGrid, UIOverlay, UISpacer, and UIPanel working together to create reusable layout primitives.',
-        )
-
-    def build_body(self, area: Vector2) -> UIElement:
-        spaced_row = UIDivision(
-            [
-                UILabel('Left', background_color=(250, 250, 250)),
-                UISpacer(),
-                UILabel('Right', background_color=(250, 250, 250)),
-            ]
-        ).set_direction('horizontal').set_gap(8)
-
-        overlay_demo = UIOverlay(
-            [
-                UIImage(DEMO_IMAGE_PATH),
-                UILabel('Overlay Demo', text_color=(255, 255, 255), background_color=None),
-            ]
-        )
-
-        grid = UIGrid(
-            [
-                UIPanel(spaced_row, background_color=(238, 234, 227), corner_radius=10, padding=10),
-                UIPanel(overlay_demo, background_color=(228, 237, 246), corner_radius=10, padding=10),
-                UIPanel(UIDivision([UILabel('Vertical 1'), UILabel('Vertical 2')]).set_direction('vertical').set_gap(8), background_color=(242, 248, 240), corner_radius=10, padding=10),
-                UIPanel(UITextBlock('UIGrid places items in cells. UIPanel adds padding and borders around content.', background_color=None, horizontal_align='start', vertical_align='start'), background_color=(249, 244, 233), corner_radius=10, padding=10),
-            ],
-            columns=2,
-            rows=2,
-        ).set_gap(10)
-
-        return self._wrap_in_page(grid)
-
-
-class MediaView(DemoView):
-
-    def __init__(self) -> None:
-        super().__init__(
-            MEDIA_VIEW_ID,
-            'Text And Media',
-            'This view focuses on UILabel, UITextBlock, UIImage, and UIProgressBar, plus a few supporting layout containers.',
-        )
-
-    def build_body(self, area: Vector2) -> UIElement:
-        left_column = UIDivision(
-            [
-                UIPanel(UILabel('Centered Label', background_color=None), background_color=(246, 243, 235), corner_radius=10),
-                UIPanel(
-                    UITextBlock(
-                        'UITextBlock wraps longer content and supports horizontal and vertical alignment. It is useful for descriptions, help text, and cards.',
-                        background_color=None,
-                        horizontal_align='start',
-                        vertical_align='start',
-                    ),
-                    background_color=(240, 247, 240),
-                    corner_radius=10,
-                ),
-                UIPanel(UIProgressBar(progress=0.68, show_percentage=True, corner_radius=8), background_color=(233, 240, 247), corner_radius=10),
-            ]
-        ).set_direction('vertical').set_gap(10)
-
-        right_column = UIPanel(
-            UIOverlay(
-                [
-                    UIImage(DEMO_IMAGE_PATH),
-                    UITextBlock(
-                        'UIImage scales loaded assets to fit the available area.',
-                        background_color=None,
-                        text_color=(255, 255, 255),
-                        horizontal_align='center',
-                        vertical_align='end',
-                    ),
-                ]
-            ),
-            background_color=(223, 233, 244),
+        return UIPanel(
+            child=column,
+            relative_size=Vector2(0.42, 1),
+            background_color=(245, 245, 245),
+            border_color=(200, 200, 200),
+            padding=16,
             corner_radius=10,
+        )
+
+    #region right column (scrollable, non-interactive)
+    def _build_scroll_panel(self, section_font: pygame.font.Font) -> UIScrollView:
+        long_text = (
+            'UITextBlock wraps long text across multiple lines with configurable '
+            'alignment, padding and line spacing. This whole right-hand column '
+            'lives inside a UIScrollView -- scroll with the mouse wheel to reach '
+            'the grid, overlay and image below. The content is taller than the '
+            'viewport, which is what makes scrolling meaningful.'
+        )
+
+        card_colors = [
+            (255, 224, 224), (224, 240, 255), (224, 255, 228),
+            (255, 246, 214), (238, 224, 255), (224, 252, 252),
+        ]
+        cards = [
+            UIPanel(
+                child=UILabel(f'Card {index + 1}', background_color=None, text_color=(40, 40, 40)),
+                background_color=color,
+                border_color=(210, 210, 210),
+                padding=10,
+                corner_radius=8,
+            )
+            for index, color in enumerate(card_colors)
+        ]
+        grid = UIGrid(cards, columns=3).set_gap(10)
+
+        overlay = UIOverlay([
+            UIImage(DEMO_IMAGE_PATH, smooth_scale=True),
+            UILabel('UIOverlay: text on top of an image', background_color=None, text_color=(255, 255, 255)),
+        ])
+
+        # relative_size taller than the viewport (y = 2) forces real scrolling.
+        content = UIDivision([
+            UILabel('Text & Media', font=section_font, background_color=(245, 245, 245), text_color=(20, 20, 20)),
+            UITextBlock(long_text, padding=10),
+            UILabel('UIGrid of UIPanels', font=section_font, background_color=(245, 245, 245), text_color=(20, 20, 20)),
+            grid,
+            UILabel('UIOverlay + UIImage', font=section_font, background_color=(245, 245, 245), text_color=(20, 20, 20)),
+            overlay,
+        ], relative_size=Vector2(1, 2)).set_direction('vertical').set_gap(10)
+
+        return UIScrollView(
+            child=content,
+            relative_size=Vector2(0.58, 1),
+            background_color=(245, 245, 245),
+            border_color=(200, 200, 200),
             padding=10,
+            scroll_speed=32,
         )
 
-        body = UIGrid([left_column, right_column], columns=2, rows=1).set_gap(10)
-        return self._wrap_in_page(body)
-
-
-class InputView(DemoView):
-
-    def __init__(self) -> None:
-        super().__init__(
-            INPUT_VIEW_ID,
-            'Interactive Elements',
-            'This view demonstrates UIButton, UICheckbox, UIToggle, UISlider, UITextInput, and UIProgressBar reacting through the event system.',
+    #region footer
+    def _build_footer(self) -> UIDivision:
+        quit_button = UIButton(
+            UILabel('Quit', background_color=None, text_color=(255, 255, 255)),
+            on_click=self._on_quit,
+            relative_size=Vector2(0.18, 1),
+            background_color=(200, 70, 70),
+            hover_color=(220, 90, 90),
+            pressed_color=(170, 50, 50),
+            border_color=(140, 40, 40),
         )
 
-    def build_body(self, area: Vector2) -> UIElement:
-        status_label = UILabel('Checkbox: off | Toggle: off | Input: <empty>', background_color=None)
-        progress_label = UILabel('Slider value: 35', background_color=None)
-        progress_bar = UIProgressBar(progress=0.35, show_percentage=True, corner_radius=8)
+        return UIDivision([
+            self._status_label,                 # weight via default relative_size
+            UISpacer(Vector2(0.1, 1)),          # UISpacer demo
+            quit_button,
+        ], relative_size=Vector2(1, 0.14)).set_direction('horizontal').set_gap(8)
 
-        checkbox: UICheckbox
-        toggle: UIToggle
-        text_input: UITextInput
+    #region callbacks
+    def _on_click(self) -> None:
+        self._click_count += 1
+        if self._status_label is not None:
+            self._status_label.set_text(f'Button clicked {self._click_count} time(s)')
 
-        def update_checkbox(value: bool) -> None:
-            toggle_text = 'on' if toggle.is_checked() else 'off'
-            input_text = text_input.get_text() or '<empty>'
-            status_label.set_text(f'Checkbox: {"on" if value else "off"} | Toggle: {toggle_text} | Input: {input_text}')
+    def _on_checkbox(self, checked: bool) -> None:
+        if self._status_label is not None:
+            self._status_label.set_text(f'Shadows {"enabled" if checked else "disabled"}')
 
-        def update_toggle(value: bool) -> None:
-            checkbox_text = 'on' if checkbox.is_checked() else 'off'
-            input_text = text_input.get_text() or '<empty>'
-            status_label.set_text(f'Checkbox: {checkbox_text} | Toggle: {"on" if value else "off"} | Input: {input_text}')
+    def _on_toggle(self, checked: bool) -> None:
+        if self._status_label is not None:
+            self._status_label.set_text(f'Dark mode {"on" if checked else "off"}')
 
-        def update_slider(value: float) -> None:
-            progress_bar.set_progress(value / 100)
-            progress_label.set_text(f'Slider value: {int(value)}')
+    def _on_slider(self, value: float) -> None:
+        if self._slider_value_label is not None:
+            self._slider_value_label.set_text(f'Slider value: {int(value)}')
+        if self._progress is not None:
+            self._progress.set_progress(value / 100.0)
 
-        def update_text(value: str) -> None:
-            checkbox_text = 'on' if checkbox.is_checked() else 'off'
-            toggle_text = 'on' if toggle.is_checked() else 'off'
-            status_label.set_text(f'Checkbox: {checkbox_text} | Toggle: {toggle_text} | Input: {value or "<empty>"}')
+    def _on_input(self, text: str) -> None:
+        if self._input_echo is not None:
+            self._input_echo.set_text(f'You typed: {text}')
 
-        checkbox = UICheckbox('Enable feature', checked=False, on_change=update_checkbox)
-        toggle = UIToggle(checked=False, on_change=update_toggle)
-        slider = UISlider(minimum=0, maximum=100, value=35, on_change=update_slider)
-        text_input = UITextInput(placeholder='Type here', on_change=update_text)
-
-        controls = UIDivision(
-            [
-                UIPanel(UIButton(_button_label('Return Home'), on_click=lambda: _navigate(HOME_VIEW_ID)), background_color=(240, 236, 225), corner_radius=10),
-                UIPanel(checkbox, background_color=(246, 246, 240), corner_radius=10),
-                UIPanel(toggle, background_color=(231, 243, 231), corner_radius=10),
-                UIPanel(slider, background_color=(233, 239, 246), corner_radius=10),
-                UIPanel(text_input, background_color=(247, 242, 235), corner_radius=10),
-                UIPanel(progress_bar, background_color=(238, 242, 247), corner_radius=10),
-                UIPanel(progress_label, background_color=(243, 247, 238), corner_radius=10),
-                UIPanel(status_label, background_color=(248, 248, 242), corner_radius=10),
-            ]
-        ).set_direction('vertical').set_gap(8)
-
-        return self._wrap_in_page(controls)
+    def _on_quit(self) -> None:
+        pygame.event.post(pygame.event.Event(pygame.QUIT))
 
 
-class ScrollViewDemo(DemoView):
+#endregion
 
-    def __init__(self) -> None:
-        super().__init__(
-            SCROLL_VIEW_ID,
-            'Scroll View',
-            'UIScrollView wraps content larger than its viewport. Use the mouse wheel while hovering this panel to scroll through the content.',
-        )
 
-    def build_body(self, area: Vector2) -> UIElement:
-        scroll_content = UIDivision(
-            [
-                UIPanel(UILabel('Scrollable Content', background_color=None), background_color=(239, 240, 232), corner_radius=10),
-                UIPanel(UITextBlock('This scroll view contains multiple labels, text blocks, and buttons inside a tall UIDivision.', background_color=None, horizontal_align='start', vertical_align='start'), background_color=(247, 244, 236), corner_radius=10),
-                UIPanel(UIButton(_button_label('Jump To Media View'), on_click=lambda: _navigate(MEDIA_VIEW_ID)), background_color=(231, 240, 248), corner_radius=10),
-                UIPanel(UILabel('Item 1')),
-                UIPanel(UILabel('Item 2')),
-                UIPanel(UILabel('Item 3')),
-                UIPanel(UILabel('Item 4')),
-                UIPanel(UILabel('Item 5')),
-                UIPanel(UILabel('Item 6')),
-                UIPanel(UILabel('Item 7')),
-                UIPanel(UILabel('Item 8')),
-                UIPanel(UILabel('Item 9')),
-                UIPanel(UILabel('Item 10')),
-            ],
-            relative_size=Vector2(1, 3),
-        ).set_direction('vertical').set_gap(8)
+#region has-view wrapper
+class ShowcaseHasView(HasView):
 
-        body = UIPanel(
-            UIScrollView(scroll_content, padding=8, scroll_speed=36),
-            background_color=(232, 238, 244),
-            corner_radius=12,
-            padding=10,
-            border_color=(70, 92, 116),
-        )
-        return self._wrap_in_page(body)
+    def __init__(self):
+        self._view = ShowcaseView()
+
+    def get_view(self) -> View:
+        return self._view
+
+    def get_id(self) -> str:
+        return 'showcase'
+
+
+#endregion
+
+
+def main() -> None:
+    pygui = PyGui(window_dimensions=Vector2(1000, 700))
+    pygui.initialize()
+    pygui.add_has_view(ShowcaseHasView())
+    pygui.set_active_view('showcase')
+    pygui.run()
 
 
 if __name__ == '__main__':

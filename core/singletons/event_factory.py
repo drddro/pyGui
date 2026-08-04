@@ -75,7 +75,6 @@ class PyGuiEventFactory:
     
     @event_source(event_type="quit_event")
     def _emit_quit_event(self) -> QuitEvent:
-        print(f"{self._unsupported_types}, are currently not supported by the PyGuiEventFactory.")
         return QuitEvent()
     
     @event_source(event_type="window_resize_event")

@@ -31,7 +31,8 @@ PyGui is a lightweight pygame-based UI framework with:
 - `core/gui/elements.py`: UI element classes
 - `core/gui/styling.py`: `Style`, `WidgetStyle`, `Theme` and the colour palettes
 - `core/gui/text.py`: font, text-surface and word-wrap caches
-- `example_app.py`: Minimal example app and view
+- `showcase_app.py` / `showcase/`: Four-page example app -- widgets, layout,
+  text and media, theming -- with page switching over `view_change_event`
 
 ## Requirements
 
@@ -46,11 +47,15 @@ PyGui is a lightweight pygame-based UI framework with:
 pip install pygame
 ```
 
-2. Run the example:
+2. Run the example app:
 
 ```bash
-python example_app.py
+python showcase_app.py
 ```
+
+It is a tour of every element, with live theming and pages that switch through
+the event system. Its pages are reachable with the number keys 1-4 or the
+navigation bar.
 
 ## Basic App Usage
 
@@ -363,7 +368,7 @@ class MenuView(View):
 
 Only the `UIRoot` subscribes to the event bus, so one `dispose()` on the root
 tears down the whole tree. Call it in `set_passive()`, exactly as
-`example_app.py` does.
+`showcase/shell.py` does.
 
 ## Troubleshooting
 

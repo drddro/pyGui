@@ -1,6 +1,6 @@
 from pygame import Surface, Vector2
 
-from core.singletons.rendering.interfaces import View
+from core.rendering.interfaces import View
 from core.singletons.asset import AssetLoader
 from core.utils.decorators import locks
 

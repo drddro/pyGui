@@ -41,7 +41,7 @@ from core.gui.elements import (
 )
 from core.gui.styling import DARK_PALETTE, LIGHT_PALETTE
 from core.singletons.asset import AssetLoader
-from core.singletons.rendering.interfaces import HasView, View
+from core.rendering.interfaces import HasView, View
 from events.annotations import event_listener, event_source, subscribes
 from showcase.assets import ensure_demo_assets
 

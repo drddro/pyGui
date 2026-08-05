@@ -6,8 +6,8 @@ from pygame import Vector2
 from core.singletons.event_factory import PyGuiEventFactory
 from core.event_models import QuitEvent, ViewChangeEvent, WindowResizeEvent
 from core.lifecycle_interface import OnExit
-from core.singletons.rendering.interfaces import HasView
-from core.singletons.rendering.renderer import Renderer
+from core.rendering.interfaces import HasView
+from core.rendering.renderer import Renderer
 from core.singletons.asset import AssetLoader
 
 from events.annotations import event_listener, subscribes
@@ -103,7 +103,7 @@ class PyGui:
         self._renderer.render()
 
 #region shutdown
-    def unsubscribe_all(self) -> None:
+    def _unsubscribe_all(self) -> None:
         event_system = get_event_system()
         event_system.unsubscribe("view_change_event", self._on_view_change)
         event_system.unsubscribe("window_resize_event", self._on_window_resize)
@@ -114,4 +114,4 @@ class PyGui:
         for callback in self._on_close_callbacks:
             callback()
         self._running = False
-        self.unsubscribe_all()
+        self._unsubscribe_all()

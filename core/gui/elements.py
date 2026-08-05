@@ -23,7 +23,10 @@ Sizing is described per axis by a `Length`:
     Length.pixels(n)      exactly n pixels
     Length.content()      whatever the element needs intrinsically
 
-`relative_size=Vector2(x, y)` is shorthand for a fraction on both axes.
+`relative_size=Vector2(x, y)` is shorthand for a fraction on both axes. Inside a
+`UIDivision` the gaps come out of the flexible children, and if the children
+still ask for more than the container has, they are all shrunk by the same
+factor -- nothing overflows the main axis.
 """
 
 from abc import ABC, abstractmethod
@@ -415,6 +418,25 @@ class UIElement(ABC):
             node._needs_paint = True
             node = node._parent
 
+    def invalidate_tree(self) -> None:
+        """Everything below this element must be laid out and painted again.
+
+        Needed when something outside the tree changes what children look like --
+        a new theme, for example -- because ordinary invalidation only travels
+        upwards towards the root.
+        """
+        self._invalidate_subtree()
+        self.invalidate_layout()
+
+    def _invalidate_subtree(self) -> None:
+        self._measure_key = None
+        self._layout_key = None
+        self._needs_measure = True
+        self._needs_layout = True
+        self._needs_paint = True
+        for child in self.iter_children():
+            child._invalidate_subtree()
+
     #region styling
     def get_theme(self) -> Theme:
         return self._root.get_theme() if self._root is not None else DEFAULT_THEME
@@ -740,7 +762,7 @@ class UIRoot(UISingleChildElement):
 
     def set_theme(self, theme: Theme) -> Self:
         self._theme = theme
-        self.invalidate_layout()
+        self.invalidate_tree()
         return self
 
     #region focus
@@ -975,7 +997,9 @@ class UIDivision(UIContainer):
         cross_total = inner.height if self._horizontal else inner.width
         main_available = max(0, main_total - gap * (len(children) - 1))
 
-        offered = self._compose(main_available, cross_total)
+        # Sized children measure against the full extent, so `relative_size` stays
+        # a fraction of the container. Gaps come out of the flexible children.
+        offered = self._compose(main_total, cross_total)
         measurements = [child.measure(context, offered) for child in children]
         main_sizes = self._distribute_main(children, measurements, main_available)
 
@@ -1025,6 +1049,14 @@ class UIDivision(UIContainer):
             for index in flexible:
                 share = 1.0 / len(flexible) if total_weight <= 0 else weights[index] / total_weight
                 sizes[index] = leftover * share
+
+        # Children never overflow the main axis: if they ask for more than there
+        # is (fractions that sum past 1, or fractions plus gaps), shrink them all
+        # by the same factor.
+        requested = sum(sizes)
+        if requested > main_available and requested > 0:
+            scale = main_available / requested
+            sizes = [size * scale for size in sizes]
 
         rounded = [int(size) for size in sizes]
         if flexible:
@@ -1424,7 +1456,7 @@ class UIScrollView(UISingleChildElement):
 
     #region interaction
     def is_focusable(self) -> bool:
-        return True
+        return self._enabled and self._visible
 
     def hit_chain(self, point: Vector2) -> list[UIElement]:
         if not self._visible or not self._rect.collidepoint(point.x, point.y):

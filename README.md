@@ -10,11 +10,16 @@ PyGui is a lightweight pygame-based UI framework with:
 - Event bus with typed models (`mouse_event`, `keyboard_event`, `view_change_event`, `quit_event`, `window_resize_event`)
 - View switching via `HasView` and `Renderer`
 - Rich UI element set:
+  - Root: `UIRoot`
   - Layout: `UIDivision`, `UIGrid`, `UIOverlay`, `UISpacer`, `UIPanel`, `UIScrollView`
   - Text/media: `UILabel`, `UITextBlock`, `UIImage`
   - Feedback: `UIProgressBar`
   - Interactive: `UIButton`, `UICheckbox`, `UIToggle`, `UISlider`, `UITextInput`
-- Interactive widgets subscribe to the event system automatically
+- A single `UIRoot` per view hit-tests the tree and routes every mouse and
+  keyboard event, and owns hover, pointer capture and keyboard focus
+- Themeable through `Theme`, `WidgetStyle` and `Style`
+- Layout, painting and hit-testing are separate passes; painted surfaces, fonts
+  and rendered text are cached
 
 ## Project Structure
 
@@ -24,6 +29,8 @@ PyGui is a lightweight pygame-based UI framework with:
 - `events/annotations.py`: Decorators (`@event_model`, `@event_source`, `@event_listener`, `@subscribes`)
 - `events/system.py`: Event bus implementation
 - `core/gui/elements.py`: UI element classes
+- `core/gui/styling.py`: `Style`, `WidgetStyle`, `Theme` and the colour palettes
+- `core/gui/text.py`: font, text-surface and word-wrap caches
 - `example_app.py`: Minimal example app and view
 
 ## Requirements
@@ -101,10 +108,82 @@ def get_surface(self, asset_loader, area) -> Surface
 
 ### Base Behavior
 
-- Relative sizing via `relative_size: Vector2`
+Each frame runs four passes instead of drawing and measuring at the same time:
+
+| Pass | What it does |
+| --- | --- |
+| `update` | per-frame hook for animation (the text caret uses it) |
+| `measure` | every element reports the size it wants for the space offered |
+| `arrange` | every element is given a final absolute `Rect` |
+| `paint` | every element draws into a surface of its own size |
+
+`get_surface()` runs all four. Because `arrange` stores absolute rectangles,
+hit-testing never needs a paint pass, and because `paint` results are cached, an
+unchanged tree costs one blit per element per frame.
+
+Every element also has:
+
+- Sizing via `relative_size: Vector2` or the richer `Length` API (see below)
 - Position and hit-testing support
-- Visibility and enabled flags
+- `set_visible()` / `set_enabled()` flags
+- `set_style()` for per-element visual overrides
 - Lifecycle cleanup via `dispose()`
+
+### Sizing
+
+Each axis is described by a `Length`:
+
+| Length | Meaning |
+| --- | --- |
+| `Length.fill(weight)` | share of the space left over (the default) |
+| `Length.fraction(f)` | fraction of the space offered by the parent |
+| `Length.pixels(n)` | exactly `n` pixels |
+| `Length.content()` | whatever the element needs intrinsically |
+
+`relative_size=Vector2(x, y)` is shorthand for a fraction on both axes.
+
+```python
+UILabel('Header', relative_size=Vector2(1, 0.1))     # 10% of the parent height
+UILabel('Fixed').set_height(Length.pixels(50))       # 50px tall
+UILabel('Tight').set_content_sized()                 # as big as its text
+UILabel('Rest')                                      # fills what is left
+```
+
+Inside a `UIDivision`, gaps come out of the flexible children, and if the
+children still ask for more than the container has they are all shrunk by the
+same factor -- nothing overflows the main axis.
+
+### UIRoot
+
+`UIRoot` wraps the tree and is the only object that talks to the event bus. It
+hit-tests, dispatches each event from the deepest element upwards until one
+consumes it, and owns hover, pointer capture and keyboard focus.
+
+```python
+root = UIRoot(UIDivision([header, body, footer]).set_direction('vertical'))
+...
+root.dispose()   # unsubscribes the whole tree in one call
+```
+
+Without a `UIRoot` a tree still lays out and paints, it just never receives
+input. Tab and Shift+Tab move focus between focusable elements; Enter and Space
+activate the focused one.
+
+### Theming
+
+Colors, borders, padding and fonts come from a `Theme`, so widgets do not have
+to be styled one at a time.
+
+```python
+root.set_theme(Theme.dark())
+root.set_theme(Theme.light().with_style('button', Style(corner_radius=16)))
+```
+
+A `Style` holds optional properties -- `None` means "inherit", and the
+`TRANSPARENT` constant means "paint nothing". A `WidgetStyle` adds per-state
+overlays (`hover`, `pressed`, `focused`, `disabled`). Any element takes a
+`style=` argument for a one-off override, and most widgets still accept the
+common colours directly (`background_color=`, `text_color=`, ...).
 
 ### Layout Elements
 
@@ -201,12 +280,18 @@ hp = UIProgressBar(progress=0.72, show_percentage=True)
 
 ### Interactive Elements
 
-Interactive elements subscribe to `mouse_event` and/or `keyboard_event` automatically.
+Interactive elements are focusable and are driven by the `UIRoot` that contains
+them. They take pointer capture while pressed, so dragging off and back behaves
+the way it does everywhere else.
 
 #### UIButton
 
+The content is any element; a plain string is wrapped in a `UILabel` that
+inherits the button's text colour and font.
+
 ```python
-button = UIButton(UILabel('Click me', background_color=None), on_click=lambda: print('clicked'))
+button = UIButton('Click me', on_click=lambda: print('clicked'))
+button = UIButton(UIImage('assets/icon.png'), on_click=lambda: print('clicked'))
 ```
 
 #### UICheckbox
@@ -229,19 +314,22 @@ slider = UISlider(minimum=0, maximum=100, value=35, on_change=lambda v: print(v)
 
 #### UITextInput
 
+Left/right, Home/End, Backspace and Delete all work, and the visible window
+scrolls to keep the caret in view. There is no selection or clipboard support.
+
 ```python
 name_input = UITextInput(placeholder='Enter name', on_change=lambda t: print(t))
 ```
 
 ## Recommended View Pattern
 
-Keep your root UI element on the view and render it every frame:
+Keep a `UIRoot` on the view and render it every frame:
 
 ```python
 from pygame import Surface, Vector2
-from core.rendering.interfaces import View
+from core.singletons.rendering.interfaces import View
 from core.singletons.asset import AssetLoader
-from core.gui.elements import UIDivision, UILabel, UIButton
+from core.gui.elements import UIButton, UIDivision, UILabel, UIRoot
 
 
 class MenuView(View):
@@ -249,11 +337,11 @@ class MenuView(View):
         self._root = None
 
     def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'MenuView':
-        self._root = UIDivision([
+        self._root = UIRoot(UIDivision([
             UILabel('Main Menu'),
-            UIButton(UILabel('Start', background_color=None), on_click=lambda: print('start')),
-            UIButton(UILabel('Quit', background_color=None), on_click=lambda: print('quit')),
-        ]).set_direction('vertical').set_gap(12)
+            UIButton('Start', on_click=lambda: print('start')),
+            UIButton('Quit', on_click=lambda: print('quit')),
+        ]).set_direction('vertical').set_gap(12))
         return self
 
     def render(self, surface: Surface, area: Vector2, asset_loader: AssetLoader) -> Surface:
@@ -273,23 +361,33 @@ class MenuView(View):
 
 ## Important Lifecycle Note
 
-Interactive elements are subscribed when instantiated. Always call `dispose()` when a view is deactivated to avoid stale event listeners.
-
-A good default is exactly what `example_app.py` now does: dispose all view elements in `set_passive()`.
+Only the `UIRoot` subscribes to the event bus, so one `dispose()` on the root
+tears down the whole tree. Call it in `set_passive()`, exactly as
+`example_app.py` does.
 
 ## Troubleshooting
 
 ### Nothing responds to mouse/keyboard
 
 - Ensure `PyGui.run()` is active
+- Ensure the tree is wrapped in a `UIRoot` -- elements never subscribe themselves
 - Ensure elements are visible and enabled
-- Ensure the element is instantiated (subscription happens on construction)
-- Ensure your view keeps a reference to the element tree
+- Ensure your view keeps a reference to the root
 
 ### UI keeps reacting after view switch
 
-- You likely forgot `dispose()` during `set_passive()`
+- You likely forgot `dispose()` on the `UIRoot` during `set_passive()`
 
 ### Text input does not type
 
-- Click the `UITextInput` first (focus required)
+- Click the `UITextInput` first, or Tab to it (focus required)
+
+### A child is clipped or overflows
+
+- Fractions sized against a container with gaps are shrunk to fit; give the
+  child `Length.fill()` if it should absorb the leftover space instead
+
+### Text or colours look wrong after a theme change
+
+- Use `root.set_theme(...)`, which invalidates the whole subtree.
+  `set_style()` on a parent does not cascade to its children

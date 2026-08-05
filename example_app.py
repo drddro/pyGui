@@ -13,12 +13,10 @@ Layout overview:
                (UITextBlock, UIGrid of UIPanels, UIOverlay, UIImage)
     - Footer:  UILabel status + UISpacer + a Quit UIButton
 
-Note: interactive elements subscribe to the event bus the moment they are
-constructed, so the view only has to render the tree every frame -- the
-positions used for hit-testing are refreshed during rendering. Interactive
-widgets are intentionally kept out of the UIScrollView, because a scroll view
-also forwards mouse events to its child; an interactive child would then be
-processed twice (once from the bus, once from the forwarded event).
+Note: the tree is wrapped in a UIRoot, which is the one object that talks to the
+event bus. It hit-tests the tree and routes each event to the element under the
+pointer, so widgets work anywhere -- including inside the UIScrollView -- and
+the whole tree is torn down with a single dispose() in set_passive().
 """
 
 import os
@@ -36,6 +34,7 @@ from core.gui.elements import (
     UIOverlay,
     UIPanel,
     UIProgressBar,
+    UIRoot,
     UIScrollView,
     UISlider,
     UISpacer,
@@ -86,7 +85,7 @@ def _ensure_demo_image() -> str:
 class ShowcaseView(View):
 
     def __init__(self):
-        self._root: UIDivision | None = None
+        self._root: UIRoot | None = None
         # Live widgets kept as references so callbacks can mutate them.
         self._status_label: UILabel | None = None
         self._slider_value_label: UILabel | None = None
@@ -138,7 +137,9 @@ class ShowcaseView(View):
 
         footer = self._build_footer()
 
-        self._root = UIDivision([header, body, footer]).set_direction('vertical').set_gap(12)
+        self._root = UIRoot(
+            UIDivision([header, body, footer]).set_direction('vertical').set_gap(12)
+        )
         return self
 
     def render(self, surface: Surface, area: Vector2, asset_loader: AssetLoader) -> Surface:

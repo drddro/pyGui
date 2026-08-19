@@ -259,7 +259,7 @@ class ShowcasePage(View, HasView):
         """The part of the page below the navigation bar."""
 
     #region view lifecycle
-    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'ShowcasePage':
+    def set_active(self, asset_loader: AssetLoader, area: Vector2) -> 'ShowcasePage':
         state = self._state
         state.page_id = self.page_id
         self._status_label = UILabel(

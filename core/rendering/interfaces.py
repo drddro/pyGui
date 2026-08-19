@@ -21,7 +21,7 @@ class View(ABC):
         pass
 
     @abstractmethod
-    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'View':
+    def set_active(self, asset_loader: AssetLoader, area: Vector2) -> 'View':
         pass
 
     @abstractmethod

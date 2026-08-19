@@ -467,7 +467,7 @@ class MenuView(View):
     def __init__(self):
         self._root = None
 
-    def set_active(self, asset_loader: AssetLoader | None, area: Vector2) -> 'MenuView':
+    def set_active(self, asset_loader: AssetLoader, area: Vector2) -> 'MenuView':
         self._root = UIRoot(UIDivision([
             UILabel('Main Menu'),
             UIButton('Start', on_click=lambda: print('start')),
